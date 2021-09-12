@@ -73,10 +73,10 @@ class HKJCScraperFuncs:
         cteams = match_element.find_element_by_class_name("cteams").find_element_by_tag_name("a").get_attribute("text")
         teams = re.match(f"^(.*)\s{self.locale['vs']}\s(.*)$", cteams).groups()
         cutoff_time = match_element.find_element_by_class_name("cesst").get_attribute("innerText")
-        if date.today().month == 12 and cutoff_time[3:5] == '01':
-            cutoff_time = str(date.today().year + 1) + '/' + cutoff_time
+        if update_time.month == 12 and cutoff_time[3:5] == '01':
+            cutoff_time = str(update_time.year + 1) + '/' + cutoff_time
         else:
-            cutoff_time = str(date.today().year) + '/' + cutoff_time
+            cutoff_time = str(update_time.year) + '/' + cutoff_time
         cutoff_time = datetime.strptime(cutoff_time, r"%Y/%d/%m %H:%M")
         oddsVal = match_element.find_elements_by_class_name("oddsVal")
         home = oddsVal[0].get_attribute("innerText")
@@ -93,10 +93,10 @@ class HKJCScraperFuncs:
         cteams = match_element.find_element_by_class_name("cteams").find_element_by_tag_name("a").get_attribute("text")
         teams = re.match(f"^(.*)\[.*\]\s{self.locale['vs']}\s(.*)\[.*\]$", cteams).groups()
         cutoff_time = match_element.find_element_by_class_name("cesst").get_attribute("innerText")
-        if date.today().month == 12 and cutoff_time[3:5] == '01':
-            cutoff_time = str(date.today().year + 1) + '/' + cutoff_time
+        if update_time.month == 12 and cutoff_time[3:5] == '01':
+            cutoff_time = str(update_time.year + 1) + '/' + cutoff_time
         else:
-            cutoff_time = str(date.today().year) + '/' + cutoff_time
+            cutoff_time = str(update_time.year) + '/' + cutoff_time
         cutoff_time = datetime.strptime(cutoff_time, r"%Y/%d/%m %H:%M")
         handicap = r'||'.join(re.match("^.*(\[.*\])\s.*\s.*(\[.*\])$", cteams).groups())
         oddsVal = match_element.find_elements_by_class_name("oddsVal")
@@ -113,10 +113,10 @@ class HKJCScraperFuncs:
         cteams = match_element.find_element_by_class_name("cteams").find_element_by_tag_name("a").get_attribute("text")
         teams = re.match(f"^(.*)\s{self.locale['vs']}\s(.*)$", cteams).groups()
         cutoff_time = match_element.find_element_by_class_name("cesst").get_attribute("innerText")
-        if date.today().month == 12 and cutoff_time[3:5] == '01':
-            cutoff_time = str(date.today().year + 1) + '/' + cutoff_time
+        if update_time.month == 12 and cutoff_time[3:5] == '01':
+            cutoff_time = str(update_time.year + 1) + '/' + cutoff_time
         else:
-            cutoff_time = str(date.today().year) + '/' + cutoff_time
+            cutoff_time = str(update_time.year) + '/' + cutoff_time
         cutoff_time = datetime.strptime(cutoff_time, r"%Y/%d/%m %H:%M")
         cline = match_element.find_element_by_class_name("cline")
         lines = cline.find_elements_by_xpath("div[contains(@class,'LineRow')]") 
