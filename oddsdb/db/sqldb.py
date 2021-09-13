@@ -74,20 +74,20 @@ class SqlDB:
             oddstype_str = l['oddstype'][oddstype.__name__]
             changed_matches = change_func(oddstype)
         
-        if not changed_matches: return None
+            if not changed_matches: continue
 
-        msg = f"{oddstype_str}{change_label}:\n"
-        for m in changed_matches:
-            msg += f"{m.match_date:%b-%d} {m.home_team} {l['vs']} {m.away_team} - "
-            if oddstype == models.Odds_HomeDrawAway:
-                msg += f"主: {m.home} 客: {m.away} 和: {m.draw}"
-            elif oddstype == models.Odds_Handicap:
-                msg += f"讓: {m.handicap} 主: {m.home} 客: {m.away}"
-            elif oddstype in (models.Odds_HiLo, models.Odds_CornerHiLo):
-                msg += f"球: {m.line} 大: {m.hi} 細: {m.lo}"
-            msg += "\n"
-        
-        notifier(msg)
+            msg = f"{oddstype_str}{change_label}:\n"
+            for m in changed_matches:
+                msg += f"{m.match_date:%b-%d} {m.home_team} {l['vs']} {m.away_team} - "
+                if oddstype == models.Odds_HomeDrawAway:
+                    msg += f"主: {m.home} 客: {m.away} 和: {m.draw}"
+                elif oddstype == models.Odds_Handicap:
+                    msg += f"讓: {m.handicap} 主: {m.home} 客: {m.away}"
+                elif oddstype in (models.Odds_HiLo, models.Odds_CornerHiLo):
+                    msg += f"球: {m.line} 大: {m.hi} 細: {m.lo}"
+                msg += "\n"
+            
+            notifier(msg)
         
 
 class UnsupportedOddsModel(Exception):
