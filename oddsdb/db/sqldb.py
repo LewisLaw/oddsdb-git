@@ -7,20 +7,57 @@ from sqlalchemy.orm import sessionmaker
 from .. import models, locale
 
 class SqlDB:
-    def __init__(self, url:str='sqlite:///oddsdb.sqlite') -> None:
+    def __init__(self, url:str='sqlite:///./oddsdb.sqlite', logger:callable=None) -> None:
         self.engine = create_engine(url)
         models.Base.metadata.create_all(self.engine)
         self.sessionfactory = sessionmaker(bind=self.engine)
+        self.logger = logger if logger else logging
     
-    def add_all(self, odds:Tuple[models.Odds]) -> None:
-        s = self.sessionfactory()
-        s.add_all(odds)
-        s.commit()
-
+    def add_all(self, matches:Tuple[models.Match]) -> None:
         
-    def get_new_matches(self, oddsmodel:models.Odds = models.Odds_HomeDrawAway) -> Tuple:
+        from collections import defaultdict
+
         s = self.sessionfactory()
-        if oddsmodel not in (models.Odds_HomeDrawAway, models.Odds_Handicap, models.Odds_HiLo, models.Odds_CornerHiLo):
+        new_msg = ""
+        update_msg = ""
+
+        match_groups = defaultdict(list)
+        for m in matches:
+            match_groups[m.start_time, m.home_team, m.away_team].append(m)
+
+
+        for k, v in match_groups.items():
+            
+            for v1 in v[1:]:
+                v[0].odds += [o for o in v1.odds]
+
+            matched = s.query(models.Match).filter(
+                models.Match.start_time==k[0], 
+                models.Match.home_team==k[1], 
+                models.Match.away_team==k[2]).first()
+
+            if matched:
+                odds = [o for o in v[0].odds]
+                matched.odds += odds
+                update_msg += f"{k[1]} 對 {k[2]} @ {k[0]:%m/%d %a}\n\t"
+                update_msg += '\n\t'.join([str(o) for o in odds]) + '\n'
+                s.expunge(v[0])
+
+            else:
+                new_msg += f"{k[1]} 對 {k[2]} @ {k[0]:%m/%d %a}\n"
+                s.add(v[0])
+
+        s.commit()
+        if new_msg:
+            self.logger.info("新增賽事\n" + new_msg)
+        if update_msg:
+            self.logger.info("賠率變動:\n" + update_msg)
+        
+
+    '''    
+    def get_new_matches(self, oddsmodel:models.Odd = models.Odd_HomeDrawAway) -> Tuple:
+        s = self.sessionfactory()
+        if oddsmodel not in (models.Odd_HomeDrawAway):#, models.Odd_Handicap, models.Odd_HiLo, models.Odd_CornerHiLo):
             raise UnsupportedOddsModel
         latest_update_time = s.query(func.max(oddsmodel.update_time)).scalar()
         result = s.query(oddsmodel, func.count(distinct(oddsmodel.update_time)))\
@@ -30,18 +67,18 @@ class SqlDB:
         return tuple()
 
     
-    def get_updated_odds(self, oddsmodel:models.Odds = models.Odds_HomeDrawAway) -> Tuple:
+    def get_updated_odds(self, oddsmodel:models.Odd = models.Odd_HomeDrawAway) -> Tuple:
         s = self.sessionfactory()
-        if oddsmodel not in (models.Odds_HomeDrawAway, models.Odds_Handicap, models.Odds_HiLo, models.Odds_CornerHiLo):
+        if oddsmodel not in (models.Odd_HomeDrawAway, models.Odd_Handicap, models.Odd_HiLo, models.Odd_CornerHiLo):
             raise UnsupportedOddsModel
         latest_update_time = s.query(func.max(oddsmodel.update_time)).scalar()
-        if oddsmodel == models.Odds_HomeDrawAway:
+        if oddsmodel == models.Odd_HomeDrawAway:
             result = s.query(oddsmodel, func.count(distinct(oddsmodel.update_time)))\
                       .group_by(oddsmodel.source, oddsmodel.match_date, oddsmodel.home_team, oddsmodel.away_team, oddsmodel.home, oddsmodel.away, oddsmodel.draw)
-        if oddsmodel == models.Odds_Handicap:
+        if oddsmodel == models.Odd_Handicap:
             result = s.query(oddsmodel, func.count(distinct(oddsmodel.update_time)))\
                       .group_by(oddsmodel.source, oddsmodel.match_date, oddsmodel.home_team, oddsmodel.away_team, oddsmodel.handicap, oddsmodel.home, oddsmodel.away)
-        if oddsmodel in (models.Odds_HiLo, models.Odds_CornerHiLo):
+        if oddsmodel in (models.Odd_HiLo, models.Odd_CornerHiLo):
             result = s.query(oddsmodel, func.count(distinct(oddsmodel.update_time)))\
                       .group_by(oddsmodel.source, oddsmodel.match_date, oddsmodel.home_team, oddsmodel.away_team, oddsmodel.line, oddsmodel.hi, oddsmodel.lo)
         if result:
@@ -52,7 +89,7 @@ class SqlDB:
         return tuple()
 
     
-    def notify_odds_change(self, change:str='new', notifier:callable=logging.info, oddstypes:Tuple[models.Odds]=(models.Odds_HomeDrawAway, models.Odds_Handicap, models.Odds_HiLo, models.Odds_CornerHiLo), lang:str='ch') -> None:
+    def notify_odds_change(self, change:str='new', notifier:callable=logging.info, oddstypes:Tuple[models.Odd]=(models.Odd_HomeDrawAway, models.Odd_Handicap, models.Odd_HiLo, models.Odd_CornerHiLo), lang:str='ch') -> None:
         
         if lang == 'ch':
             l = locale.ch
@@ -79,16 +116,16 @@ class SqlDB:
             msg = f"{oddstype_str}{change_label}:\n"
             for m in changed_matches:
                 msg += f"{m.match_date:%b-%d} {m.home_team} {l['vs']} {m.away_team} - "
-                if oddstype == models.Odds_HomeDrawAway:
+                if oddstype == models.Odd_HomeDrawAway:
                     msg += f"主: {m.home} 客: {m.away} 和: {m.draw}"
-                elif oddstype == models.Odds_Handicap:
+                elif oddstype == models.Odd_Handicap:
                     msg += f"讓: {m.handicap} 主: {m.home} 客: {m.away}"
-                elif oddstype in (models.Odds_HiLo, models.Odds_CornerHiLo):
+                elif oddstype in (models.Odd_HiLo, models.Odd_CornerHiLo):
                     msg += f"球: {m.line} 大: {m.hi} 細: {m.lo}"
                 msg += "\n"
             
             notifier(msg)
-        
+        '''
 
 class UnsupportedOddsModel(Exception):
     pass

@@ -5,8 +5,11 @@ from selenium.webdriver.support import expected_conditions as EC
 from selenium.webdriver.common.by import By
 from datetime import date, datetime, timedelta
 import re
+
+from sqlalchemy.sql.expression import update
 from .. import locale
-from ..models import Odds, Odds_CornerHiLo, Odds_Handicap, Odds_HiLo, Odds_HomeDrawAway
+from ..models import Match, Odd, Odd_CornerHiLo, Odd_Handicap, Odd_HiLo, Odd_HomeAwayDraw
+#from ..models import Odds, Odds_CornerHiLo, Odds_Handicap, Odds_HiLo, Odds_HomeDrawAway
 
 class HKJCScraperFuncs:
     
@@ -21,19 +24,19 @@ class HKJCScraperFuncs:
             self.locale = locale.ch
         self.delay = delay
 
-    def scrap_homedrawaway(self) -> Tuple[Odds_HomeDrawAway]: 
+    def scrap_homedrawaway(self) -> Tuple[Match]: 
         return self.scrap(f"https://bet.hkjc.com/football/index.aspx?lang={self.lang}", self.parse_homedrawaway)
 
-    def scrap_handicap(self) -> Tuple[Odds_Handicap]:
+    def scrap_handicap(self) -> Tuple[Match]:
         return self.scrap(f"https://bet.hkjc.com/football/odds/odds_hdc.aspx?lang={self.lang}", self.parse_handicap)
 
-    def scrap_hilo(self) -> Tuple[Odds_HiLo]:
+    def scrap_hilo(self) -> Tuple[Match]:
         return self.scrap(f"https://bet.hkjc.com/football/odds/odds_hil.aspx?lang={self.lang}", self.parse_hilo)
 
-    def scrap_cornerhilo(self) -> Tuple[Odds_CornerHiLo]:
-        return self.scrap(f"https://bet.hkjc.com/football/odds/odds_chl.aspx?lang={self.lang}", self.parse_hilo, {'oddshilotype': Odds_CornerHiLo})
+    def scrap_cornerhilo(self) -> Tuple[Match]:
+        return self.scrap(f"https://bet.hkjc.com/football/odds/odds_chl.aspx?lang={self.lang}", self.parse_hilo, {'oddshilotype': Odd_CornerHiLo})
 
-    def scrap(self, url: str, matchparser: Callable, matchparserparam: dict = {}) -> Tuple[Odds]:
+    def scrap(self, url: str, matchparser: Callable, matchparserparam: dict = {}) -> Tuple[Match]:
 
         self.browser.get(url)
 
@@ -66,7 +69,7 @@ class HKJCScraperFuncs:
         return oddslist
 
 
-    def parse_homedrawaway(self, match_element, update_time:datetime) -> Odds_HomeDrawAway:
+    def parse_homedrawaway(self, match_element, update_time:datetime) -> Match:
         
         wkday = match_element.find_element_by_class_name("cday").get_attribute("innerText")[:3]
         match_date=date.today() + timedelta(days = -1 if (wkdiff:=self.locale['weekdays'][wkday] - date.today().weekday()) == 6 else wkdiff if wkdiff >= -1 else wkdiff + 7)
@@ -83,10 +86,16 @@ class HKJCScraperFuncs:
         draw = oddsVal[1].get_attribute("innerText")
         away = oddsVal[2].get_attribute("innerText")
 
-        return Odds_HomeDrawAway(source='hkjc', match_date=match_date, home_team=teams[0], away_team=teams[1], home=home, draw=draw, away=away, update_time=update_time, cutoff_time=cutoff_time)
+        return Match(
+            start_time=cutoff_time, 
+            home_team=teams[0], 
+            away_team=teams[1],
+            odds = [
+                Odd_HomeAwayDraw(source='hkjc', update_time=update_time, home=home, draw=draw, away=away)
+            ]
+        )
 
-
-    def parse_handicap(self, match_element, update_time:datetime) -> Odds_Handicap:
+    def parse_handicap(self, match_element, update_time:datetime) -> Match:
         
         wkday = match_element.find_element_by_class_name("cday").get_attribute("innerText")[:3]
         match_date=date.today() + timedelta(days = -1 if (wkdiff:=self.locale['weekdays'][wkday] - date.today().weekday()) == 6 else wkdiff if wkdiff >= -1 else wkdiff + 7)
@@ -103,10 +112,16 @@ class HKJCScraperFuncs:
         home = oddsVal[0].get_attribute("innerText")
         away = oddsVal[1].get_attribute("innerText")
 
-        return Odds_Handicap(source='hkjc', match_date=match_date, home_team=teams[0], away_team=teams[1], home=home, away=away, handicap=handicap, update_time=update_time, cutoff_time=cutoff_time)
+        return Match(
+            start_time=cutoff_time, 
+            home_team=teams[0], 
+            away_team=teams[1],
+            odds = [
+                Odd_Handicap(source='hkjc', update_time=update_time, handicap=handicap, home=home, away=away)
+            ]
+        )
 
-
-    def parse_hilo(self, match_element, update_time:datetime, oddshilotype = Odds_HiLo) -> Odds_HiLo:
+    def parse_hilo(self, match_element, update_time:datetime, oddshilotype = Odd_HiLo) -> Match:
         
         wkday = match_element.find_element_by_class_name("cday").get_attribute("innerText")[:3]
         match_date=date.today() + timedelta(days = -1 if (wkdiff:=self.locale['weekdays'][wkday] - date.today().weekday()) == 6 else wkdiff if wkdiff >= -1 else wkdiff + 7)
@@ -124,11 +139,17 @@ class HKJCScraperFuncs:
         his = codds[0].find_elements_by_xpath("div[contains(@class,'LineRow')]")
         los = codds[1].find_elements_by_xpath("div[contains(@class,'LineRow')]")
 
-        odds_list = tuple()
+        m = Match(
+            start_time=cutoff_time, 
+            home_team=teams[0], 
+            away_team=teams[1],
+        )
+
         for ln, h, l in zip(lines, his, los):
             line = ln.get_attribute("innerText")
             hi = h.get_attribute("innerText")
             lo = l.get_attribute("innerText")
-            odds_list += (oddshilotype(source='hkjc', match_date=match_date, home_team=teams[0], away_team=teams[1], line=line, hi=hi, lo=lo, update_time=update_time, cutoff_time=cutoff_time), )
-        
-        return odds_list
+            #odds_list += (oddshilotype(source='hkjc', match_date=match_date, home_team=teams[0], away_team=teams[1], line=line, hi=hi, lo=lo, update_time=update_time, cutoff_time=cutoff_time), )
+            m.odds += [oddshilotype(source='hkjc', update_time=update_time, line=line, hi=hi, lo=lo)]
+
+        return m
